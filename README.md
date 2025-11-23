@@ -62,6 +62,7 @@ AI (Optional): Gemini API or other integrations for insights
 
 ## Project Structure
 
+```
 FlowState/
 ├── frontend/
 │   ├── index.html            # Main dashboard
@@ -71,7 +72,7 @@ FlowState/
 │   ├── received_live.json    # Live biometric data
 │   └── venv/                 # Virtual environment
 └── docs/                     # Notes, design drafts
-
+```
 ## Hackathon Vision
 FlowState was built to demonstrate how biometric feedback can enhance creative work. By visualizing heart rate and breathing in real time, users gain awareness of their focus levels and can adjust their workflow to stay in the “flow zone.”
 
