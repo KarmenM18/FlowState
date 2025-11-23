@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>flow.state | Bio-Canvas</title>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+
+    <style>
+        /* --- GOOEY GLASS DESIGN SYSTEM --- */
+        :root {
+            --bg-color: #F4F1EA; 
+            --text-color: #1A1A1A;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden; 
+            font-family: 'Inter', sans-serif;
+        }
+
+        .grain-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 50; opacity: 0.4;
+            filter: url(#noiseFilter); mix-blend-mode: multiply;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--text-color); border-radius: 10px; }
+
+        .font-script { font-family: 'Pacifico', cursive; }
+        .font-mono { font-family: 'Space Mono', monospace; }
+
+        /* GLASS CARD */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+            border-radius: 24px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        @keyframes deep-breath {
+            0%, 100% { transform: scale(1); opacity: 0.9; }
+            50% { transform: scale(1.05); opacity: 1; }
+        }
+        .animate-breath { animation: deep-breath 6s infinite ease-in-out; }
+        
+        /* Gooey Blobs */
+        @keyframes blob-float {
+            0% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(30px, -50px) scale(1.1); }
+            66% { transform: translate(-20px, 20px) scale(0.9); }
+            100% { transform: translate(0, 0) scale(1); }
+        }
+        .animate-blob { animation: blob-float 15s infinite alternate ease-in-out; }
+
+        /* Pacer Animation */
+        @keyframes pacer-expand {
+            0% { transform: scale(0.85); opacity: 0.7; }
+            40% { transform: scale(1.15); opacity: 1; } 
+            60% { transform: scale(1.15); opacity: 1; } 
+            100% { transform: scale(0.85); opacity: 0.7; } 
+        }
+        .animate-pacer { animation: pacer-expand 8s infinite ease-in-out; }
+
+        /* Liquid Transition */
+        @keyframes liquid-expand {
+            0% { transform: scale(0); opacity: 0; border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+            50% { opacity: 1; }
+            100% { transform: scale(100); opacity: 1; border-radius: 50%; }
+        }
+        .liquid-transition {
+            animation: liquid-expand 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        
+        /* Inputs */
+        textarea, input {
+            background: rgba(255,255,255,0.5);
+            border: 1px solid rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+        textarea:focus, input:focus {
+            background: rgba(255,255,255,0.8);
+            border-color: #000;
+            outline: none;
+        }
+
+        /* Help Button Glide Animation */
+        .help-btn-container {
+            width: 40px;
+            transition: width 0.3s ease;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        .help-btn-container:hover {
+            width: 110px;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen selection:bg-yellow-300 selection:text-black">
+
+    <svg style="display: none;">
+        <filter id="noiseFilter">
+            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" stitchTiles="stitch"/>
+        </filter>
+    </svg>
+    <div class="grain-overlay"></div>
+    <div id="root" class="h-full w-full relative z-10"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+        const apiKey = "AIzaSyCmqTCTseVUwZf4I8QO8fThV8q8Qs3dJNI"; 
+
+        // --- ICONS ---
+        const Icon = ({ children, className }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="square" strokeLinejoin="miter" className={className}>{children}</svg>;
+        const Clock = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></Icon>;
+        const Heart = (p) => <Icon {...p}><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></Icon>;
+        const Brain = (p) => <Icon {...p}><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/></Icon>;
+        const Sparkles = (p) => <Icon {...p}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275-1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></Icon>;
+        const Play = (p) => <Icon {...p}><polygon points="5 3 19 12 5 21 5 3"/></Icon>;
+        const Pause = (p) => <Icon {...p}><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></Icon>;
+        const Trash = (p) => <Icon {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></Icon>;
+        const Palette = (p) => <Icon {...p}><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></Icon>;
+        const Info = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></Icon>;
+        const HelpCircle = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></Icon>;
+        const Hourglass = (p) => <Icon {...p}><path d="M4.5 3h15"/><path d="M4.5 21h15"/><path d="M6 3v4c0 2 2 4 4 4h4c2 0 4-2 4-4V3"/><path d="M6 21v-4c0-2 2-4 4-4h4c2 0 4 2 4 4v4"/></Icon>;
+        const Stopwatch = (p) => <Icon {...p}><circle cx="12" cy="14" r="8"/><line x1="12" y1="6" x2="12" y2="6"/><line x1="12" y1="2" x2="12" y2="4"/></Icon>;
+        const Activity = (p) => <Icon {...p}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></Icon>;
+        const Wifi = (p) => <Icon {...p}><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></Icon>;
+        const HardDrive = (p) => <Icon {...p}><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></Icon>;
+
+        // --- BACKGROUND ---
+        const GooeyBackground = () => (
+            <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none opacity-70">
+                <div className="absolute top-[-10%] left-[-10%] w-[70vw] h-[70vw] bg-[#E93D3D] rounded-full mix-blend-multiply blur-[100px] animate-blob"></div>
+                <div className="absolute top-[20%] right-[-10%] w-[60vw] h-[60vw] bg-[#2D5D9B] rounded-full mix-blend-multiply blur-[120px] animate-blob" style={{animationDelay: '2s'}}></div>
+                <div className="absolute bottom-[-10%] left-[20%] w-[65vw] h-[65vw] bg-[#F3C809] rounded-full mix-blend-multiply blur-[110px] animate-blob" style={{animationDelay: '4s'}}></div>
+            </div>
+        );
+
+        // --- LOGIC ---
+        const getSpectrumColor = (bpm) => {
+            if (bpm <= 60) return "#4B0082"; 
+            if (bpm >= 110) return "#E93D3D"; 
+            if (bpm < 65) return "#2D5D9B"; 
+            if (bpm < 75) return "#4ADE80"; 
+            if (bpm < 85) return "#F3C809"; 
+            if (bpm < 95) return "#FB923C"; 
+            return "#E93D3D";
+        };
+
+        const getContrastColor = (hex) => {
+            if (!hex) return '#000';
+            const r = parseInt(hex.substr(1, 2), 16);
+            const g = parseInt(hex.substr(3, 2), 16);
+            const b = parseInt(hex.substr(5, 2), 16);
+            const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+            return (yiq >= 128) ? '#1A1A1A' : '#F4F1EA';
+        };
+
+        const callGemini = async (prompt) => {
+            if (!apiKey) {
+                console.warn("API Key is missing.");
+                return "API Key Missing: Please provide a valid key.";
+            }
+            let attempt = 0;
+            const maxRetries = 5;
+            const delays = [1000, 2000, 4000, 8000, 16000];
+            while (attempt <= maxRetries) {
+                try {
+                    const response = await fetch(
+                        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
+                        { 
+                            method: 'POST', 
+                            headers: { 'Content-Type': 'application/json' }, 
+                            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) 
+                        }
+                    );
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        if (response.status === 429 || response.status >= 500) { throw new Error(`Server error: ${response.status}`); }
+                        return `Error: ${errorData.error?.message || "Unknown error"}`;
+                    }
+                    const data = await response.json();
+                    return data.candidates?.[0]?.content?.parts?.[0]?.text || "No insight generated.";
+                } catch (error) {
+                    if (attempt === maxRetries) return "Connection failed after multiple attempts.";
+                    await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+                    attempt++;
+                }
+            }
+        };
+
+        const generateMockDaySession = () => {
+            const segments = 100; 
+            const history = [];
+            const startTime = new Date(); startTime.setHours(10, 0, 0, 0);
+            let currentBpm = 65;
+            for (let i = 0; i < segments; i++) {
+                if (i < 10) currentBpm += 1.5; 
+                else if (i < 40) currentBpm = 78 + (Math.sin(i) * 5);
+                else if (i < 50) currentBpm = 105;
+                else if (i < 90) currentBpm = 82 + (Math.cos(i) * 3);
+                else currentBpm -= 2; 
+                const time = new Date(startTime.getTime() + (i * 30000));
+                history.push({ timestamp: time, bpm: currentBpm, color: getSpectrumColor(currentBpm), inFlow: currentBpm > 75 && currentBpm < 95 });
+            }
+            return history;
+        };
+
+        // --- LANDING PAGE ---
+        const LandingPage = ({ onStart }) => {
+            const [isTransitioning, setIsTransitioning] = useState(false);
+
+            const handleEnter = () => {
+                setIsTransitioning(true);
+                setTimeout(() => {
+                    onStart();
+                }, 1200);
+            };
+
+            return (
+                <div className="h-full w-full flex flex-col items-center justify-center relative z-20 p-12 overflow-hidden">
+                    
+                    {/* Liquid Transition Overlay */}
+                    <div 
+                        className={`absolute top-1/2 left-1/2 bg-[#F4F1EA] z-50 pointer-events-none ${isTransitioning ? 'liquid-transition' : 'w-0 h-0 opacity-0'}`}
+                        style={{transform: 'translate(-50%, -50%)'}}
+                    ></div>
+
+                    {/* Center Logo */}
+                    <div 
+                        onClick={handleEnter}
+                        className={`relative group cursor-pointer z-30 flex flex-col items-center justify-center transition-opacity duration-500 ${isTransitioning ? 'opacity-0' : ''}`}
+                    >
+                        <h1 className="text-[120px] md:text-[150px] font-script text-black leading-tight transition-all duration-500 group-hover:blur-md group-hover:scale-105 animate-breath relative z-10">
+                            flow.state
+                        </h1>
+                        
+                        {/* Hover Reveal */}
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 z-20">
+                            <span className="font-mono text-2xl font-bold tracking-[0.5em] bg-white/80 backdrop-blur-md px-6 py-3 border border-black/10 shadow-xl uppercase rounded-xl">
+                                Enter Flow
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className={`absolute bottom-12 text-center transition-opacity duration-500 ${isTransitioning ? 'opacity-0' : ''}`}>
+                        <p className="font-mono text-xs font-bold tracking-widest mb-2">BIO-CANVAS v2.0</p>
+                        <p className="font-sans text-sm text-gray-500 max-w-md mx-auto">"Creativity is a bio-mechanic, not a dream."</p>
+                    </div>
+                </div>
+            );
+        };
+
+        const AboutView = () => (
+            <div className="glass-card p-8 h-full overflow-y-auto">
+                <div className="max-w-3xl mx-auto space-y-12">
+                    <div className="border-b border-black/10 pb-6">
+                        <h2 className="text-5xl font-script mb-4">Manifesto</h2>
+                        <p className="font-mono text-xl font-bold">"Bio-Hacking the Creative Spirit"</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div><h3 className="font-mono font-bold text-lg bg-[#E93D3D] text-white inline-block px-2 mb-3 rounded-md">MISSION</h3><p className="font-sans leading-relaxed">To abolish the division between the artist and the craftsman...</p></div>
+                        <div><h3 className="font-mono font-bold text-lg bg-[#2D5D9B] text-white inline-block px-2 mb-3 rounded-md">SYSTEM</h3><ul className="font-mono text-sm space-y-2 list-disc pl-4"><li><b>React 18</b></li><li><b>Tailwind CSS</b></li><li><b>Gemini API</b></li></ul></div>
+                    </div>
+                </div>
+            </div>
+        );
+
+        // --- TUTORIAL OVERLAY ---
+        const TutorialOverlay = ({ step, onNext, onSkip }) => {
+            const steps = [
+                {
+                    target: 'timer',
+                    text: 'Choose your rhythm. Toggle between Stopwatch (count up) or Hourglass (count down).',
+                    pos: 'top-32 left-1/4',
+                    align: 'items-start'
+                },
+                {
+                    target: 'orb',
+                    text: 'This is your Bio-Feedback Avatar. It visualizes your flow state and rhythm in real-time.',
+                    pos: 'top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2',
+                    align: 'items-center'
+                },
+                {
+                    target: 'planner',
+                    text: 'Your digital canvas. Drag notes to organize, resize corners to expand, and click "FLOW" for AI inspiration.',
+                    pos: 'top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2', 
+                    align: 'items-center'
+                },
+                {
+                    target: 'tabs',
+                    text: 'Navigate your workspace. Switch between the Canvas, Planner, Stats, and Manifesto.',
+                    pos: 'top-20 right-12',
+                    align: 'items-end'
+                }
+            ];
+
+            const current = steps[step];
+            if (!current) return null;
+
+            return (
+                <div className="absolute inset-0 z-50 bg-black/20 backdrop-blur-[2px] animate-fade-in pointer-events-auto" onClick={onNext}>
+                    <div className={`absolute ${current.pos} flex flex-col ${current.align} max-w-sm p-4 text-white`} onClick={(e) => e.stopPropagation()}>
+                        <div className="bg-black text-white p-4 rounded-xl shadow-2xl border border-white/20 mb-4 animate-bounce-slight cursor-default">
+                            <h3 className="font-mono font-bold text-[#F3C809] text-sm mb-2">STEP {step + 1}/{steps.length}</h3>
+                            <p className="font-sans text-sm leading-relaxed">{current.text}</p>
+                            <div className="mt-4 flex gap-2">
+                                <button onClick={(e) => { e.stopPropagation(); onNext(); }} className="bg-white text-black px-4 py-1 rounded-full text-xs font-bold hover:bg-gray-200 cursor-pointer">
+                                    {step === steps.length - 1 ? 'FINISH' : 'NEXT'}
+                                </button>
+                                <button onClick={(e) => { e.stopPropagation(); onSkip(); }} className="text-white/70 px-2 py-1 text-xs hover:text-white cursor-pointer">SKIP</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- DASHBOARD ---
+        const DashboardView = ({ showTutorial, setShowTutorial }) => {
+            const [activeTab, setActiveTab] = useState('main');
+            const [metricsTab, setMetricsTab] = useState('dna'); 
+            const [timerMode, setTimerMode] = useState('chrono'); // 'chrono' or 'timer'
+
+            const [bpm, setBpm] = useState(null);
+            const [breathingRate, setBreathingRate] = useState(null);
+             const [flowScore, setFlowScore] = useState(null);
+            
+            // Metrics
+            // const [bpm, setBpm] = useState(80);
+            const [timeElapsed, setTimeElapsed] = useState(0);
+            const [timeLeft, setTimeLeft] = useState(25 * 60);
+            const [isTimerRunning, setIsTimerRunning] = useState(false);
+            const [orbColor, setOrbColor] = useState("#4B0082");
+            const [intervention, setIntervention] = useState(false);
+            const [dayHistory, setDayHistory] = useState(generateMockDaySession()); 
+            
+            // Planner
+            const [pinboardItems, setPinboardItems] = useState([
+                { id: 1, type: 'note', x: 50, y: 50, w: 200, h: 200, color: '#F3C809', text: 'Research Bauhaus Grid Systems' },
+                { id: 2, type: 'note', x: 300, y: 50, w: 200, h: 200, color: '#E93D3D', text: 'Flow = Challenge / Skill' },
+            ]);
+            const [isDragging, setIsDragging] = useState(null);
+            const [isResizing, setIsResizing] = useState(null);
+            const [selectedNoteId, setSelectedNoteId] = useState(null); // Selection state
+            const [customNoteColor, setCustomNoteColor] = useState('#8B5CF6'); // For custom color picker
+            const dragOffset = useRef({ x: 0, y: 0 });
+            const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
+
+            // AI & Palette
+            const [aiInsight, setAiInsight] = useState(null);
+            const [activeBreath, setActiveBreath] = useState(null);
+            const [isAnalysing, setIsAnalysing] = useState(false);
+            const [timeFilter, setTimeFilter] = useState('day');
+            
+            // Tutorial State
+            const [tutorialStep, setTutorialStep] = useState(0);
+            
+            // Sensor/Biometric State
+            const [showSensor, setShowSensor] = useState(false);
+            const [simulatedBpm, setSimulatedBpm] = useState(72);
+            const [useLocalBridge, setUseLocalBridge] = useState(false);
+
+            const orbTextColor = getContrastColor(orbColor);
+
+            // ROYGBIV Presets
+            const roygbiv = ['#EF4444', '#F97316', '#EAB308', '#22C55E', '#3B82F6', '#6366F1', '#8B5CF6'];
+
+            // --- LOCAL EFFECTS (Colors, etc) ---
+            useEffect(() => {
+                setOrbColor(getSpectrumColor(bpm));
+                const inFlow = bpm > 75 && bpm < 95;
+                setIntervention(!inFlow);
+            }, [bpm]);
+
+
+            // Karmen Added
+            useEffect(() => {
+  const interval = setInterval(async () => {
+    try {
+      const res = await fetch('./received_live.json?_=' + Date.now()); // cache-busting
+      if (res.ok) {
+        const data = await res.json();
+        console.log("Bridge data:", data); // debug log
+
+        if (typeof data.bpm === 'number') setBpm(data.bpm);
+        if (typeof data.breathing_rate === 'number') setBreathingRate(data.breathing_rate);
+        if (typeof data.flow_score === 'number') setFlowScore(data.flow_score);
+
+        // optional: update orb color based on flow score
+        if (typeof data.flow_score === 'number') {
+          if (data.flow_score >= 70) setOrbColor('#2D5D9B'); // flow
+          else if (data.flow_score >= 40) setOrbColor('#F3C809'); // semi-flow
+          else setOrbColor('#E93D3D'); // not in flow
+        }
+      }
+    } catch (err) {
+      console.warn("Fetch error:", err);
+    }
+  }, 1000);
+
+  return () => clearInterval(interval);
+}, []);
+
+
+            // --- DEMO FLUCTUATION ---
+            useEffect(() => {
+                if (!useLocalBridge) {
+                    const int = setInterval(() => {
+                        // Increased random range to +/- 7 to ensure color boundaries are crossed more often
+                        let change = Math.floor(Math.random() * 15) - 7; 
+                        let next = bpm + change;
+                        
+                        // Bounds checking
+                        if (next < 60) next = 60; 
+                        if (next > 110) next = 110;
+
+                        setBpm(next);
+                        
+                        // Update history so the graph moves
+                        setDayHistory(prev => {
+                            const newItem = { 
+                                timestamp: new Date(), 
+                                bpm: next, 
+                                color: getSpectrumColor(next), 
+                                inFlow: next > 75 && next < 95 
+                            };
+                            const newHistory = [...prev, newItem];
+                            if (newHistory.length > 100) newHistory.shift(); 
+                            return newHistory;
+                        });
+
+                    }, 2000);
+                    return () => clearInterval(int);
+                }
+            }, [useLocalBridge, bpm]); // bpm dependency ensures we use current value
+
+            // --- TUTORIAL TAB SYNC ---
+            useEffect(() => {
+                if (showTutorial) {
+                    if (tutorialStep === 2) {
+                        setActiveTab('planner'); 
+                    } else if (tutorialStep < 2) {
+                        setActiveTab('main'); 
+                    }
+                }
+            }, [tutorialStep, showTutorial]);
+
+            // --- TIMER LOGIC ---
+            useEffect(() => {
+                let int;
+                if (isTimerRunning) {
+                    int = setInterval(() => {
+                        if (timerMode === 'chrono') setTimeElapsed(p => p + 1);
+                        else setTimeLeft(p => { if (p <= 1) { setIsTimerRunning(false); return 0; } return p - 1; });
+                    }, 1000);
+                }
+                return () => clearInterval(int);
+            }, [isTimerRunning, timerMode]);
+
+            // --- LOCAL BRIDGE FETCH LOGIC ---
+            useEffect(() => {
+                let interval;
+                if (useLocalBridge) {
+                    interval = setInterval(async () => {
+                        try {
+                            const res = await fetch('./received_live.json');
+                            if (res.ok) {
+                                const data = await res.json();
+                                // Try to find a likely BPM value key from various potential JSON sources
+                                // Also supports 'temperature' mapping to BPM visual range if bpm is missing
+                                let val = data.bpm || data.heart_rate || data.heartRate || data.value || data.hr;
+                                
+                                if (!val && data.temperature) {
+                                    // Map temperature (approx 20-30) to BPM (60-100) for visual feedback
+                                    val = 60 + ((data.temperature - 20) * 4); 
+                                }
+
+                                if (val && typeof val === 'number') {
+                                    simulateSensorPush(Math.round(val));
+                                }
+                            }
+                        } catch (e) {
+                            // Silent fail for local fetch as it might be blocked or missing
+                        }
+                    }, 1000);
+                }
+                return () => clearInterval(interval);
+            }, [useLocalBridge]);
+
+            // --- HANDLERS ---
+            const handlePaletteClick = async (colorName) => {
+                setActiveBreath("Generating...");
+                const prompt = `Recommend a breathing technique for ${colorName} mood. Return name + pattern only.`;
+                const res = await callGemini(prompt);
+                setActiveBreath(res);
+            };
+
+            const handleCreativeSpark = async () => {
+                let sourceText = "";
+                
+                // Check if a specific note is selected
+                if (selectedNoteId) {
+                    const note = pinboardItems.find(n => n.id === selectedNoteId);
+                    sourceText = note ? note.text : "";
+                }
+                
+                // Fallback to all notes if nothing selected or selected note is empty
+                if (!sourceText.trim()) {
+                    sourceText = pinboardItems.map(i => i.text).join(", ");
+                }
+
+                const finalText = sourceText || "Abstract minimalism and biological rhythm";
+                // Modified prompt for brevity
+                const prompt = `Bauhaus Creative Director: Analyze notes [${finalText}]. Provide a short, poetic, abstract creative continuation (max 2-3 lines) related to this input.`;
+                const res = await callGemini(prompt);
+                if(res) setPinboardItems(p => [...p, { id: Date.now(), type: 'note', x: 100, y: 300, w: 200, h: 200, color: '#2D5D9B', text: res }]);
+            };
+
+            const simulateSensorPush = (val) => {
+                setBpm(val);
+                setDayHistory(prev => {
+                    const newItem = { 
+                        timestamp: new Date(), 
+                        bpm: val, 
+                        color: getSpectrumColor(val), 
+                        inFlow: val > 75 && val < 95 
+                    };
+                    const newHistory = [...prev, newItem];
+                    if (newHistory.length > 100) newHistory.shift(); 
+                    return newHistory;
+                });
+            };
+
+            const startDrag = (e, id) => { 
+                e.stopPropagation(); 
+                setIsDragging(id); 
+                setSelectedNoteId(id); // Select note on click/drag start
+                const rect = e.currentTarget.getBoundingClientRect(); 
+                dragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }; 
+            };
+            
+            const startResize = (e, id) => { e.stopPropagation(); const item = pinboardItems.find(i => i.id === id); setIsResizing(id); resizeStart.current = { x: e.clientX, y: e.clientY, w: item.w, h: item.h }; };
+            const handleMouseMove = (e) => {
+                if (isDragging) {
+                    const container = e.currentTarget.getBoundingClientRect();
+                    const x = e.clientX - container.left - dragOffset.current.x;
+                    const y = e.clientY - container.top - dragOffset.current.y;
+                    setPinboardItems(prev => prev.map(i => i.id === isDragging ? { ...i, x, y } : i));
+                } else if (isResizing) {
+                    const dx = e.clientX - resizeStart.current.x;
+                    const dy = e.clientY - resizeStart.current.y;
+                    setPinboardItems(prev => prev.map(i => i.id === isResizing ? { ...i, w: Math.max(100, resizeStart.current.w + dx), h: Math.max(100, resizeStart.current.h + dy) } : i));
+                }
+            };
+            const handleMouseUp = () => { setIsDragging(null); setIsResizing(null); };
+            const addNote = (color) => setPinboardItems(p => [...p, { id: Date.now(), type: 'note', x: Math.random()*200, y: Math.random()*200, w: 200, h: 200, color, text: 'New Idea...' }]);
+            const formatTime = (s) => `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+
+            const handleAiReview = async () => {
+                setIsAnalysing(true);
+                const prompt = `Review flow DNA: 60 mins, avg BPM 72. Suggest optimization.`;
+                const res = await callGemini(prompt);
+                setAiInsight(res || "Syncing...");
+                setIsAnalysing(false);
+            };
+            
+            const nextTutorial = () => {
+                if (tutorialStep < 3) setTutorialStep(prev => prev + 1);
+                else setShowTutorial(false);
+            };
+
+            return (
+                <div className="flex flex-col h-full w-full p-6 md:p-12 relative z-20 pointer-events-none">
+                    
+                    {showTutorial && <TutorialOverlay step={tutorialStep} onNext={nextTutorial} onSkip={() => setShowTutorial(false)} />}
+
+                    {showSensor && (
+                        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm pointer-events-auto" onClick={() => setShowSensor(false)}>
+                            <div className="bg-white p-6 rounded-2xl shadow-2xl max-w-md w-full m-4 border border-black/10" onClick={e => e.stopPropagation()}>
+                                <div className="flex justify-between items-center mb-4 pb-2 border-b border-black/10">
+                                    <div className="flex items-center gap-2">
+                                        <Wifi className="w-5 h-5 text-[#2D5D9B] animate-pulse" />
+                                        <h3 className="font-mono font-bold">BIOMETRIC LINK</h3>
+                                    </div>
+                                    <button onClick={() => setShowSensor(false)} className="text-gray-400 hover:text-black">✕</button>
+                                </div>
+                                
+                                <div className="space-y-4">
+                                    <div className="p-3 bg-black/5 rounded-lg font-mono text-xs text-gray-600 break-all">
+                                        <strong>TARGET:</strong> LOCAL_SIMULATION_ONLY
+                                    </div>
+                                    
+                                    {/* LOCAL BRIDGE TOGGLE */}
+                                    <div className="flex items-center justify-between p-2 bg-gray-100 rounded-lg">
+                                        <div className="flex items-center gap-2">
+                                            <HardDrive className="w-4 h-4 text-gray-600" />
+                                            <span className="font-mono text-xs font-bold text-gray-600">LOCAL FILE BRIDGE</span>
+                                        </div>
+                                        <button 
+                                            onClick={() => setUseLocalBridge(!useLocalBridge)}
+                                            className={`w-10 h-5 rounded-full p-1 transition-colors duration-300 ${useLocalBridge ? 'bg-[#2D5D9B]' : 'bg-gray-300'}`}
+                                        >
+                                            <div className={`w-3 h-3 bg-white rounded-full shadow-sm transition-transform duration-300 ${useLocalBridge ? 'translate-x-5' : 'translate-x-0'}`}></div>
+                                        </button>
+                                    </div>
+                                    
+                                    {!useLocalBridge && (
+                                        <div>
+                                            <label className="block font-mono text-xs font-bold mb-2">SIMULATE BPM INPUT</label>
+                                            <div className="flex items-center gap-4">
+                                                <input 
+                                                    type="range" min="40" max="180" 
+                                                    value={simulatedBpm} 
+                                                    onChange={(e) => {
+                                                        setSimulatedBpm(parseInt(e.target.value));
+                                                        simulateSensorPush(parseInt(e.target.value));
+                                                    }}
+                                                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                                />
+                                                <span className="font-mono text-xl font-bold w-12 text-right">{simulatedBpm}</span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <button onClick={() => { setSimulatedBpm(60); simulateSensorPush(60); }} className="p-2 border border-black/10 rounded-lg hover:bg-[#2D5D9B] hover:text-white text-xs font-mono">CALM (60)</button>
+                                        <button onClick={() => { setSimulatedBpm(90); simulateSensorPush(90); }} className="p-2 border border-black/10 rounded-lg hover:bg-[#F3C809] hover:text-black text-xs font-mono">FLOW (90)</button>
+                                        <button onClick={() => { setSimulatedBpm(140); simulateSensorPush(140); }} className="p-2 border border-black/10 rounded-lg hover:bg-[#E93D3D] hover:text-white text-xs font-mono">STRESS (140)</button>
+                                    </div>
+
+                                    <div className="p-3 bg-[#F3C809]/10 border border-[#F3C809] rounded-lg mt-4">
+                                        <p className="font-mono text-[10px] text-gray-600 leading-tight">
+                                            <strong>{useLocalBridge ? "BRIDGE ACTIVE:" : "SIMULATION MODE:"}</strong> 
+                                            {useLocalBridge 
+                                                ? " Polling 'received_live.json' for real-time sensor updates from Python bridge."
+                                                : " This panel simulates receiving raw biometric data and updating the app state locally."
+                                            }
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* NAVIGATION */}
+                    <div className="flex flex-col md:flex-row justify-between items-end border-b border-black/10 pb-6 mb-8 pointer-events-auto glass-card p-4 relative z-40">
+                        <div><h1 className="text-4xl font-script text-black">flow.state</h1><p className="font-mono text-xs mt-1 tracking-widest">BIO-CANVAS v2.0</p></div>
+                        <div className="flex gap-2 mt-4 md:mt-0 flex-wrap justify-end">
+                            {['main', 'planner', 'stats', 'about'].map(t => (
+                                <button key={t} onClick={() => setActiveTab(t)} className={`px-4 py-2 font-mono text-xs font-bold uppercase border border-black/10 rounded-full transition-all ${activeTab === t ? 'bg-black text-white shadow-lg' : 'bg-white/50 text-black hover:bg-white'}`}>
+                                    {t === 'main' ? 'Canvas' : t.charAt(0).toUpperCase() + t.slice(1)}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="flex-1 relative pointer-events-auto z-30">
+                        {activeTab === 'about' && <AboutView />}
+                        
+                        {activeTab === 'main' && (
+                            <div className="flex gap-8 h-full relative">
+                                {/* Left: Controls */}
+                                <div className="w-1/4 flex flex-col gap-6">
+                                    <div className="glass-card p-6 shadow-lg flex flex-col items-center">
+                                        <div className="flex border-b border-black/10 w-full pb-4 mb-4 justify-between items-center">
+                                            <span className="font-mono font-bold text-xs">TIMER TYPE</span>
+                                            <div className="flex bg-black/5 p-1 rounded-lg gap-1">
+                                                <button 
+                                                    onClick={() => setTimerMode('chrono')} 
+                                                    className={`p-2 rounded-md transition-all ${timerMode === 'chrono' ? 'bg-black text-white shadow-md' : 'text-gray-400 hover:text-black'}`}
+                                                    title="Stopwatch"
+                                                >
+                                                    <Stopwatch className="w-4 h-4" />
+                                                </button>
+                                                <button 
+                                                    onClick={() => setTimerMode('timer')} 
+                                                    className={`p-2 rounded-md transition-all ${timerMode === 'timer' ? 'bg-black text-white shadow-md' : 'text-gray-400 hover:text-black'}`}
+                                                    title="Hourglass"
+                                                >
+                                                    <Hourglass className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="text-5xl font-mono font-bold tabular-nums mb-6">{timerMode === 'chrono' ? formatTime(timeElapsed) : formatTime(timeLeft)}</div>
+                                        
+                                        {timerMode === 'timer' && !isTimerRunning && <input type="range" min="1" max="120" value={Math.ceil(timeLeft/60)} onChange={(e) => setTimeLeft(e.target.value * 60)} className="w-full mb-4 cursor-pointer rounded-full overflow-hidden appearance-none bg-black/10 h-2"/>}
+                                        
+                                        <button onClick={() => setIsTimerRunning(!isTimerRunning)} className={`w-16 h-16 flex items-center justify-center border-2 border-black shadow-lg active:translate-y-1 active:shadow-none transition-all rounded-full ${isTimerRunning ? 'bg-white' : 'bg-[#F3C809]'}`}>{isTimerRunning ? <Pause className="w-6 h-6"/> : <Play className="w-6 h-6"/>}</button>
+                                        
+                                        {/* SENSOR TOGGLE */}
+                                        <button 
+                                            onClick={() => setShowSensor(true)}
+                                            className="mt-4 p-2 rounded-full bg-black/5 hover:bg-black/10 transition-colors flex items-center gap-2"
+                                            title="Biometric Link"
+                                        >
+                                            <Activity className="w-4 h-4 text-gray-500" />
+                                            <span className="font-mono text-[10px] font-bold text-gray-500">LINK</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Center: Orb & Palette */}
+                                <div className="flex-1 flex items-center justify-center relative">
+                                    {activeBreath && <div className="absolute top-10 left-1/2 transform -translate-x-1/2 bg-black text-white p-4 font-mono text-sm border border-white/20 shadow-xl z-50 animate-fade-in rounded-xl backdrop-blur-xl"><span className="font-bold text-[#F3C809]">AI COACH:</span> {activeBreath}<button onClick={() => setActiveBreath(null)} className="ml-4 text-gray-400 hover:text-white">x</button></div>}
+                                    
+                                    <div className="absolute top-4 right-4 z-40 group">
+                                        <div className="w-12 h-12 bg-white border border-black/10 rounded-full flex items-center justify-center shadow-lg cursor-pointer hover:bg-gray-50"><Palette className="w-6 h-6" /></div>
+                                        <div className="absolute top-14 right-0 bg-white/90 border border-black/10 p-3 shadow-xl w-48 hidden group-hover:block animate-fade-in rounded-xl backdrop-blur-md">
+                                            <p className="font-mono text-[10px] mb-2 border-b border-black/10">BREATH SWATCHES</p>
+                                            <div className="flex gap-2 justify-between">
+                                                <button onClick={() => handlePaletteClick('Red')} className="w-8 h-8 rounded-full bg-[#E93D3D] border border-black/10 hover:scale-110 transition-transform" title="Energy"></button>
+                                                <button onClick={() => handlePaletteClick('Blue')} className="w-8 h-8 rounded-full bg-[#2D5D9B] border border-black/10 hover:scale-110 transition-transform" title="Calm"></button>
+                                                <button onClick={() => handlePaletteClick('Yellow')} className="w-8 h-8 rounded-full bg-[#F3C809] border border-black/10 hover:scale-110 transition-transform" title="Focus"></button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* The Orb */}
+                                    <div className={`w-80 h-80 rounded-full border border-white/40 flex flex-col items-center justify-center bg-white/20 backdrop-blur-lg relative shadow-2xl transition-colors duration-1000`}>
+                                        <div className={`absolute inset-0 rounded-full opacity-40 transition-colors duration-1000 blur-2xl ${intervention ? 'animate-pacer' : 'animate-blob'}`} style={{background: orbColor}}></div>
+                                        
+                                        {/* Dynamic Text Color based on Orb Background */}
+                                        <h2 className="text-7xl font-script z-10 relative" style={{color: orbTextColor}}>flow</h2>
+                                        <div className="flex items-center gap-2 mt-2 z-10" style={{color: orbTextColor}}>
+                                            <Heart className="w-6 h-6 animate-pulse" fill={orbTextColor} />
+                                            <span className="font-mono text-3xl font-bold">{bpm}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* DETECTIVE BLUEPRINT */}
+                        {activeTab === 'planner' && (
+                            <div className="h-full flex gap-4">
+                                <div className="w-48 flex flex-col gap-4 pointer-events-auto z-30">
+                                    <div className="glass-card p-4 space-y-3">
+                                        <p className="font-mono text-xs font-bold border-b border-black/10 pb-1">ADD NOTE</p>
+                                        
+                                        {/* ROYGBIV Grid */}
+                                        <div className="grid grid-cols-7 gap-1">
+                                            {roygbiv.map(c => (
+                                                <button 
+                                                    key={c} 
+                                                    onClick={() => addNote(c)} 
+                                                    className="w-full aspect-square rounded-full border border-black/10 shadow-sm hover:scale-110 transition-transform" 
+                                                    style={{backgroundColor: c}}
+                                                    title={c}
+                                                />
+                                            ))}
+                                        </div>
+
+                                        {/* Custom Picker */}
+                                        <div className="flex items-center gap-2 pt-2 border-t border-black/5">
+                                            <div className="relative flex-1 h-8 rounded-md overflow-hidden border border-black/10 shadow-inner">
+                                                <input 
+                                                    type="color" 
+                                                    value={customNoteColor} 
+                                                    onChange={(e) => setCustomNoteColor(e.target.value)}
+                                                    className="absolute -top-2 -left-2 w-[150%] h-[150%] cursor-pointer p-0 border-0"
+                                                />
+                                            </div>
+                                            <button 
+                                                onClick={() => addNote(customNoteColor)} 
+                                                className="px-3 py-1 bg-black text-white text-[10px] font-mono font-bold rounded-md hover:bg-gray-800"
+                                            >
+                                                CUSTOM
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <button onClick={handleCreativeSpark} className="glass-card p-4 flex items-center gap-2 hover:bg-black hover:text-white transition-colors group">
+                                        <Sparkles className="w-5 h-5 group-hover:text-[#F3C809]" />
+                                        <span className="font-mono text-xs font-bold">{selectedNoteId ? "FLOW SELECTED" : "FLOW ALL"}</span>
+                                    </button>
+
+                                    {/* Mini Flow Monitor */}
+                                    <div className="glass-card p-4 flex flex-col items-center gap-4 mt-auto">
+                                        <div className="w-full border-b border-black/10 pb-2 mb-1 flex justify-between items-center">
+                                            <span className="font-mono text-[10px] font-bold">FLOW MONITOR</span>
+                                            <div className={`w-2 h-2 rounded-full ${isTimerRunning ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+                                        </div>
+                                        
+                                        <div className="relative w-24 h-24 flex items-center justify-center">
+                                             <div className={`absolute inset-0 rounded-full opacity-30 blur-xl transition-colors duration-1000 ${intervention ? 'animate-pacer' : 'animate-blob'}`} style={{background: orbColor}}></div>
+                                             <div className="w-full h-full rounded-full border border-white/40 flex flex-col items-center justify-center bg-white/40 backdrop-blur-md relative z-10">
+                                                <span className="font-script text-xl" style={{color: orbTextColor}}>flow</span>
+                                                <span className="font-mono text-xs font-bold" style={{color: orbTextColor}}>{bpm}</span>
+                                             </div>
+                                        </div>
+
+                                        <div className="text-center w-full">
+                                            <div className="text-2xl font-mono font-bold tabular-nums">
+                                                {timerMode === 'chrono' ? formatTime(timeElapsed) : formatTime(timeLeft)}
+                                            </div>
+                                            <div className="flex justify-center gap-2 mt-2">
+                                                 <button onClick={() => setIsTimerRunning(!isTimerRunning)} className={`w-8 h-8 flex items-center justify-center border border-black/20 shadow-md active:translate-y-0.5 active:shadow-none transition-all rounded-full ${isTimerRunning ? 'bg-white' : 'bg-[#F3C809]'}`}>
+                                                    {isTimerRunning ? <Pause className="w-3 h-3"/> : <Play className="w-3 h-3"/>}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div 
+                                    id="pinboard-area"
+                                    className="flex-1 glass-card relative overflow-hidden cursor-crosshair"
+                                    onMouseDown={(e) => { if(e.target === e.currentTarget) setSelectedNoteId(null); }} 
+                                    onMouseMove={handleMouseMove}
+                                    onMouseUp={handleMouseUp}
+                                    onMouseLeave={handleMouseUp}
+                                >
+                                    <div className="absolute top-4 right-4 font-mono text-xs text-gray-400 pointer-events-none">DRAG & DROP / RESIZE</div>
+                                    {pinboardItems.map(item => (
+                                        <div
+                                            key={item.id}
+                                            onMouseDown={(e) => startDrag(e, item.id)}
+                                            className={`absolute p-4 shadow-xl border ${selectedNoteId === item.id ? 'border-black border-2 z-50 ring-2 ring-offset-2 ring-[#F3C809]' : 'border-black/10'} cursor-move hover:z-50 transition-all rounded-xl backdrop-blur-sm`}
+                                            style={{ left: item.x, top: item.y, width: item.w, height: item.h, backgroundColor: item.color }}
+                                        >
+                                            <textarea 
+                                                className="w-full h-full bg-transparent border-none outline-none font-mono text-xs resize-none placeholder-black/50 pb-4" 
+                                                value={item.text} 
+                                                onChange={(e) => {
+                                                    const text = e.target.value;
+                                                    setPinboardItems(prev => prev.map(i => i.id === item.id ? {...i, text} : i))
+                                                }}
+                                            />
+                                            <div 
+                                                onMouseDown={(e) => startResize(e, item.id)}
+                                                className="absolute bottom-0 right-0 w-6 h-6 cursor-nwse-resize flex items-end justify-end p-1"
+                                            >
+                                                <div className="w-2 h-2 bg-black/20 rounded-full"></div>
+                                            </div>
+                                            
+                                            <button onClick={() => setPinboardItems(prev => prev.filter(i => i.id !== item.id))} className="absolute top-1 right-1 opacity-50 hover:opacity-100"><Trash className="w-3 h-3" /></button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* METRICS */}
+                        {activeTab === 'stats' && (
+                            <div className="glass-card p-8 h-full flex flex-col overflow-y-auto">
+                                <div className="flex justify-between items-center mb-6 border-b border-black/10 pb-4">
+                                    <h3 className="font-mono font-bold text-2xl">METRICS</h3>
+                                    <div className="flex gap-2 font-mono text-xs">
+                                        <button onClick={() => setMetricsTab('dna')} className={`px-3 py-1 border border-black/20 rounded-full ${metricsTab === 'dna' ? 'bg-[#F3C809] text-black shadow-md' : 'bg-white/50 hover:bg-white'}`}>FLOW DNA</button>
+                                        <button onClick={() => setMetricsTab('history')} className={`px-3 py-1 border border-black/20 rounded-full ${metricsTab === 'history' ? 'bg-[#2D5D9B] text-white shadow-md' : 'bg-white/50 hover:bg-white'}`}>HISTORY</button>
+                                    </div>
+                                </div>
+
+                                {metricsTab === 'dna' && (
+                                    <div className="space-y-8">
+                                        <div className="flex justify-between items-center">
+                                            <h4 className="font-mono font-bold text-lg bg-black text-white px-2 inline-block rounded-sm">SESSION DNA STRING</h4>
+                                            <button onClick={handleAiReview} disabled={isAnalysing} className="flex items-center gap-2 text-xs font-bold border border-black/20 px-3 py-1 hover:bg-[#2D5D9B] hover:text-white transition-colors rounded-full">{isAnalysing ? "ANALYZING..." : "AI REVIEW"}</button>
+                                        </div>
+                                        {aiInsight && <div className="p-4 border border-black/10 bg-[#F3C809]/20 font-mono text-xs leading-relaxed rounded-xl shadow-inner">{aiInsight}</div>}
+                                        
+                                        <div className="relative w-full h-32 border border-black/10 bg-white/30 backdrop-blur-sm flex items-end overflow-hidden rounded-xl">
+                                            {dayHistory.length > 0 ? dayHistory.map((d, i) => (
+                                                <div 
+                                                    key={i} 
+                                                    className="flex-1 transition-all hover:scale-y-110 hover:opacity-100 opacity-90 relative group" 
+                                                    style={{
+                                                        height: '100%', 
+                                                        background: `linear-gradient(to top, ${d.color}, transparent)`
+                                                    }}
+                                                >
+                                                    <div className="absolute bottom-0 w-full h-1 bg-black/10"></div>
+                                                </div>
+                                            )) : (
+                                                <div className="w-full h-full flex items-center justify-center text-xs font-mono text-gray-400">START TIMER TO GENERATE DNA</div>
+                                            )}
+                                        </div>
+                                        <div className="flex justify-between font-mono text-xs text-gray-500 border-t border-black/10 pt-2">
+                                            <span>00:00</span>
+                                            <span>30s INTERVALS</span>
+                                            <span>CURRENT</span>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-8">
+                                        <div className="glass-card p-4">
+                                        <div className="text-xs font-mono font-bold text-black/70 mb-1">FLOW SCORE</div>
+                                        <div className="text-3xl font-mono font-bold">{flowScore ?? '--'}</div>
+                                        </div>
+                                        <div className="glass-card p-4">
+                                        <div className="text-xs font-mono font-bold text-black/70 mb-1">BREATHING RATE</div>
+                                        <div className="text-3xl font-mono font-bold">{breathingRate ?? '--'} brpm</div>
+                                        </div>
+                                        <div className="glass-card p-4">
+                                        <div className="text-xs font-mono font-bold text-black/70 mb-1">HEART RATE</div>
+                                        <div className="text-3xl font-mono font-bold">{bpm ?? '--'} bpm</div>
+                                        </div>
+                                        </div>
+
+                                    </div>
+                                )}
+
+                                {metricsTab === 'history' && (
+                                    <div className="space-y-8">
+                                        <div className="flex gap-2 justify-center font-mono text-xs mb-4">
+                                            {['day', 'week', 'month'].map(t => (
+                                                <button key={t} onClick={() => setTimeFilter(t)} className={`px-4 py-1 border border-black/20 rounded-full ${timeFilter === t ? 'bg-black text-white' : 'bg-white/50 hover:bg-white'}`}>{t.toUpperCase()}</button>
+                                            ))}
+                                        </div>
+                                        
+                                        <div className="h-64 w-full border border-black/10 p-4 flex items-end gap-2 bg-white/30 rounded-xl relative">
+                                            <div className="absolute top-2 left-2 font-mono text-[10px] text-gray-400">DATA: COMBINED</div>
+                                            {[60, 45, 90, 120, 30, 60, 75].map((h, i) => (
+                                                <div key={i} className="flex-1 bg-[#2D5D9B] hover:bg-[#E93D3D] transition-colors relative group rounded-t-lg" style={{height: `${h}%`}}>
+                                                    <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 font-mono text-xs opacity-0 group-hover:opacity-100 transition-opacity">{h}m</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        
+                        {/* BOTTOM LEFT HELP BUTTON */}
+                        <div 
+                            className="absolute bottom-4 left-4 z-50 pointer-events-auto flex items-center gap-2 help-btn-container cursor-pointer bg-white text-black p-2 rounded-full shadow-lg border border-black/10"
+                            onClick={() => { setTutorialStep(0); setShowTutorial(true); }}
+                        >
+                            <HelpCircle className="w-6 h-6 shrink-0" />
+                            <span className="font-mono text-xs font-bold pr-2">TUTORIAL</span>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [view, setView] = useState('landing');
+            const [showTutorial, setShowTutorial] = useState(true);
+
+            return (
+                <>
+                    <GooeyBackground />
+                    {view === 'landing' ? 
+                        <LandingPage onStart={() => setView('dashboard')} /> : 
+                        <DashboardView 
+                            showTutorial={showTutorial} 
+                            setShowTutorial={setShowTutorial} 
+                        />
+                    }
+                </>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
